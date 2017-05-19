@@ -1,0 +1,2 @@
+# AmAI
+AI core
