@@ -1,0 +1,148 @@
+import numpy as np
+import math
+import pandas as pd
+import matplotlib.pyplot as plt
+from colorama import Fore
+
+def cusum_engine(data):
+    rS = 0
+    CUSUM = []
+    n = len(data)
+    xmean = data.mean()
+    for i in range(n):
+        rS = rS + (data[i] - xmean)
+        CUSUM.append(rS)
+    #print(CUSUM)
+    df_CUSUM = pd.DataFrame({'CUSUM': CUSUM})
+    return df_CUSUM
+
+def confidence_level(data, sampling = 1000):
+
+    columns_list = ['Smax', 'Smin', 'Sdiff']
+    df = pd.DataFrame(columns=columns_list)
+    data_new = data.sample(frac=1)
+    CUSUM_0 = cusum_engine(data_new)
+    CUSUMdiff0 = CUSUM_0['CUSUM'].max() - CUSUM_0['CUSUM'].min()
+    Nbreaks = 0
+    print('CUSUMdiff0:', CUSUMdiff0)
+    for i in range(sampling-1):
+        data_new = data.sample(frac=1).reset_index(drop=True)
+        print(data_new)
+        CUSUM_simulation = cusum_engine(data_new)
+        CUSUM_0['CUSUM_'+str(i)] = CUSUM_simulation
+        CUSUMdiff = CUSUM_simulation['CUSUM'].max() - CUSUM_simulation['CUSUM'].min()
+        print('CUSUMdiff:', CUSUMdiff)
+        if CUSUMdiff < CUSUMdiff0:
+            Nbreaks = Nbreaks + 1
+        #print('CUSUMdiff:', CUSUMdiff)
+    conf_level = Nbreaks / sampling
+    return conf_level, CUSUM_0
+
+get_sada = 'C:/amoly/data/data_sim.csv'
+sep = ' '
+data_sample = pd.read_csv(get_sada,sep)
+data = data_sample['N_events']
+print(Fore.GREEN)
+
+CUSUM = cusum_engine(data)
+print(CUSUM)
+
+z = 3
+for i in range(z):
+    CUSUM['CUSUM+'+str(i)] = CUSUM['CUSUM'].shift(i-1)
+print(Fore.LIGHTBLUE_EX)
+C = CUSUM.fillna(CUSUM['CUSUM'].mean())
+
+C.loc[(abs(C['CUSUM+1']) > abs(C['CUSUM+0'])) & (abs(C['CUSUM+1']) > abs(C['CUSUM+2'])), 'Change_point']= 10
+#C.loc[(C['CUSUM+1'] < C['CUSUM+0']) & (C['CUSUM+1'] < C['CUSUM+2']) & (C['CUSUM+2'] < C['CUSUM+3']), 'Change_point']= -10
+data_sample['change_point'] = C['Change_point']
+data_sample['CUSUM'] = C['CUSUM']
+#C.loc[(C['CUSUM+1'] - C['CUSUM+0'] ) (C['CUSUM+1'] > C['CUSUM+2'] ) , 'Change_point_2'] = 1
+# & (C['CUSUM+2'] > C['CUSUM+3'])
+#C.apply(lambda x: x + 360)
+print(Fore.LIGHTYELLOW_EX)
+print(C)
+
+def find_mean(data):
+    S = 0
+    MList = []
+    n = len(data)
+    #Xmean = data.mean()
+    data['mean_in_range'] = np.nan
+    for i in range(data['Change_point']):
+        if data['Change_point'][i] == 10:
+            Xmean = data[S:i-1].mean
+            S = i
+            data['mean_in_range'][S:i-1] = Xmean
+    return data
+
+
+
+mean = data_sample['N_events'].mean()
+data_sample = data_sample.fillna(0)
+
+#df = find_mean(data_sample)
+df = data_sample
+print(df[:1]['change_point'])
+
+
+
+
+S = 0
+MList = []
+n = len(df)
+Xmean = data.mean()
+df['mean_in_range'] = np.nan
+for i, row in df.iterrows():
+    if row['change_point'] == 10:
+        Xmean = df[S:i+1]['N_events'].mean()
+        print('found one!' + str(Xmean))
+        df.ix[S:i+1, 'mean_in_range'] = Xmean
+        S = i+1
+    print(i, n)
+    if i == n-1:
+        Xmean = df[S:n]['N_events'].mean()
+        df.ix[S:n, 'mean_in_range'] = Xmean
+
+print(Fore.LIGHTBLUE_EX)
+print(df)
+df.plot()
+plt.show()
+exit()
+
+mean_list = [mean]
+#for i in range(len(data_sample2['Change_point'])):
+#    if data_sample2.iloc[i, 'Change_point'] = 10:
+#        data_sample2.set_value(i, 'mean_value', data_sample2['N_events'].iloc[range(i)].mean(), takeable=False)
+#data_sample2.iloc[data_sample2['Change_point'] = 1, 'mean'] = data_sample2['N_events'].iloc[range(i)].mean()]
+#DataFrame.set_value(index, col, value, takeable=False)
+#data_sample2.plot()
+plt.show()
+exit()
+#df.gdp = df.gdp.shift(-1)
+exit()
+#C['Change_point'] = C.apply(lambda row: if row['CUSUM+0'] < row['CUSUM+1'] then 1, axis=1)
+print(C)
+#df.gdp = df.gdp.shift(-1)
+exit()
+df = CUSUM.cov(36)
+print(df)
+exit()
+qu = pd.Series([0, data['N_events']])
+print(qu)
+exit()
+d = {'one' : pd.Series([0, data['N_events']], index=[range(len(data['N_events'])+1)])}
+
+df = pd.DataFrame(d)
+print(df)
+exit()
+df = pd.DataFrame()
+
+df['time_series'] = data_sample['N_events']
+CUSUM = cusum_engine(data)
+df['CUSUM'] = CUSUM['CUSUM']
+
+data_sample['change_point'] = df['CUSUM']
+df.plot()
+plt.show()
+
