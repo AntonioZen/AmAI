@@ -1,0 +1,108 @@
+import numpy as np
+import math
+import pandas as pd
+import matplotlib.pyplot as plt
+from colorama import Fore
+
+
+def cusum_engine(data):
+    rS = 0
+    CUSUM = []
+    n = len(data)
+    xmean = data.mean()
+    for i in range(n):
+        rS = rS + (data[i] - xmean)
+        CUSUM.append(rS)
+    df_CUSUM = pd.DataFrame({'CUSUM': CUSUM})
+    return df_CUSUM
+
+def confidence_level(data, sampling = 1000):
+    columns_list = ['Smax', 'Smin', 'Sdiff']
+    df = pd.DataFrame(columns=columns_list)
+    data_new = data.sample(frac=1)
+    CUSUM_0 = cusum_engine(data_new)
+    CUSUMdiff0 = CUSUM_0['CUSUM'].max() - CUSUM_0['CUSUM'].min()
+    Nbreaks = 0
+    print('CUSUMdiff0:', CUSUMdiff0)
+    for i in range(sampling-1):
+        data_new = data.sample(frac=1).reset_index(drop=True)
+        CUSUM_simulation = cusum_engine(data_new)
+        CUSUM_0['CUSUM_'+str(i)] = CUSUM_simulation
+        CUSUMdiff = CUSUM_simulation['CUSUM'].max() - CUSUM_simulation['CUSUM'].min()
+        print('CUSUMdiff:', CUSUMdiff)
+        if CUSUMdiff < CUSUMdiff0:
+            Nbreaks = Nbreaks + 1
+        #print('CUSUMdiff:', CUSUMdiff)
+    conf_level = Nbreaks / sampling
+    return conf_level, CUSUM_0
+
+def mean_shift(data, z = 3):
+    for i in range(z):
+        data['CUSUM+'+str(i)] = data['CUSUM'].shift(i-1)
+    data_upd = data.fillna(data['CUSUM'].mean())
+    return data_upd
+
+def find_cp(data):
+
+    data.loc[(abs(data['CUSUM+1']) > abs(data['CUSUM+0'])) & (abs(data['CUSUM+1']) > abs(data['CUSUM+2'])), 'Change_point']= 1
+    data_upd = data.fillna(0)
+    print(Fore.LIGHTYELLOW_EX)
+    print(data)
+    return data_upd
+
+def find_mean(data):
+    S = 0
+    n = len(data)
+    data['mean_in_range'] = np.nan
+    for i, row in data.iterrows():
+        if row['Change_point'] == 1:
+            Xmean = data[S:i+1]['N_events'].mean()
+            print('found one!' + str(Xmean))
+            data.ix[S:i+1, 'mean_in_range'] = Xmean
+            S = i+1
+        print(i, n)
+        if i == n-1:
+            Xmean = data[S:n]['N_events'].mean()
+            data.ix[S:n, 'mean_in_range'] = Xmean
+    return data
+
+def moving_average(series, n):
+    return np.average(series[-n:])
+
+
+get_sada = 'D:\amoly\CPM\data2.csv'
+sep = ','
+data_sample = pd.read_csv(get_sada,sep)
+data = data_sample['N_events']
+
+
+
+step1 = cusum_engine(data)
+print(Fore.RED)
+print(step1)
+
+
+step2 = mean_shift(cusum_engine(data))
+print(Fore.YELLOW)
+print(step2)
+
+model_output = find_cp(mean_shift(cusum_engine(data)))
+print(Fore.LIGHTYELLOW_EX)
+print(model_output)
+
+data_sample['Change_point'] = model_output['Change_point']
+print(Fore.LIGHTBLUE_EX)
+print(data_sample)
+
+step4 = find_mean(data_sample)
+step4.plot(y = ['N_events','mean_in_range'])
+plt.show()
+#step4['N_events','Change_point','mean_in_range'].plot()
+print(Fore.GREEN)
+print(step4)
+
+conf, CUSUM_df = confidence_level(step1['CUSUM'])
+print(Fore.LIGHTYELLOW_EX)
+print(conf)
+exit()
+
