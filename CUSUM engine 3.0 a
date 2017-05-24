@@ -1,0 +1,21 @@
+def exponential_smoothing(series, alpha):
+    result = [series[0]] # first value is same as series
+    for n in range(1, len(series)):
+        result.append(alpha * series[n] + (1 - alpha) * result[n-1])
+    return result
+    
+def cusum_engine3(data):
+    rS = 0
+    CUSUM = []
+    n = len(data)
+    xmean = data.mean()
+    for i in range(n):
+        rS = rS + (data[i] - xmean)
+        CUSUM.append(rS)
+
+    #CUSUMseries = pd.Series(list('CUSUM')).values(CUSUM, dtype=object)
+    df_CUSUM = pd.DataFrame({'CUSUM_OLD': CUSUM})
+    CUSUMseries = pd.Series(CUSUM, name='CUSUM')
+    df_CUSUM['CUSUM'] = double_exponential_smoothing(CUSUMseries, 0.5, 0.5)
+
+    return df_CUSUM
