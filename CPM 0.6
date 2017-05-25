@@ -1,0 +1,78 @@
+import numpy as np
+import math
+import pandas as pd
+import matplotlib.pyplot as plt
+from colorama import Fore
+
+def exponential_smoothing(series, alpha):
+    result = [series[0]]  # first value is same as series
+    for n in range(1, len(series)):
+        result.append(alpha * series[n] + (1 - alpha) * result[n - 1])
+
+    return result
+
+def shift(data, z = 3):
+    for i in range(z):
+        data['CUSUM+' + str(i)] = data['CUSUM'].shift(i - 1)
+    data_upd = data.fillna(data['CUSUM'].mean())
+
+    return data_upd
+
+def find_change_points(data):
+    data.loc[(abs(data['CUSUM+1']) > abs(data['CUSUM+0'])) & (abs(data['CUSUM+1']) > abs(data['CUSUM+2'])), 'Change_point'] = 1
+    data_upd = data.fillna(0)
+    print(Fore.LIGHTYELLOW_EX)
+    print(data)
+
+    return data_upd
+
+def find_mean(data):
+    S = 0
+    n = len(data)
+    data['mean_in_range'] = np.nan
+    for i, row in data.iterrows():
+        if row['Change_point'] == 1:
+            Xmean = data[S:i+1]['metric'].mean()
+            print('found one!' + str(Xmean))
+            data.ix[S:i+1, 'mean_in_range'] = Xmean
+            S = i+1
+        print(i, n)
+        if i == n-1:
+            Xmean = data[S:n]['metric'].mean()
+            data.ix[S:n, 'mean_in_range'] = Xmean
+    return data
+
+def cpm_engine(metric_series, alpha_cusum = 0.9, alpha_metric = 0.8):
+
+    data_smooth_list = exponential_smoothing(metric_series, alpha_metric)
+    data = pd.Series(data_smooth_list)
+
+    rS = 0
+    CUSUM = []
+    n = len(data)
+    xmean = data.mean()
+    for i in range(n):
+        rS = rS + (data[i] - xmean)
+        CUSUM.append(rS)
+
+    CUSUMseries = pd.Series(CUSUM, name='CUSUM')
+    cusum_frame = pd.DataFrame()
+    cusum_frame['CUSUM'] = exponential_smoothing(CUSUMseries, alpha_cusum)
+    cusum_shift = shift(cusum_frame)
+    output_frame = find_change_points(cusum_shift)
+    output_frame['metric'] = metric_series
+    model_total = find_mean(output_frame)
+    return model_total
+
+get_sada = 'D:\ZOOM\CPM\RPSS_6m.csv'
+sep = ','
+data_sample = pd.read_csv(get_sada,sep)
+
+model_frame = cpm_engine(data_sample.N_events)
+
+print(Fore.LIGHTYELLOW_EX)
+print(model_frame)
+model_frame.plot(y = ['metric','mean_in_range', 'CUSUM'])
+plt.show()
+
+exit()
