@@ -1,0 +1,174 @@
+import numpy as np
+import math
+import pandas as pd
+import pymysql
+
+import mysql.connector
+from sqlalchemy import create_engine
+import matplotlib.pyplot as plt
+from colorama import Fore
+
+def exponential_smoothing(series, alpha):
+    result = [series[0]]  # first value is same as series
+    for n in range(1, len(series)):
+        result.append(alpha * series[n] + (1 - alpha) * result[n - 1])
+
+    return result
+
+def shift(data, z = 3):
+    for i in range(z):
+        data['CUSUM+' + str(i)] = data['CUSUM'].shift(i - 1)
+    data_upd = data.fillna(0)
+
+    return data_upd
+
+def find_change_points(data):
+    data.loc[(abs(data['CUSUM+1']) > abs(data['CUSUM+0'])) & (abs(data['CUSUM+1']) > abs(data['CUSUM+2'])), 'Change_point'] = 1
+    data_upd = data.fillna(0)
+    print(Fore.LIGHTYELLOW_EX)
+
+    return data_upd
+
+def find_mean(data):
+    S = 0
+    n = len(data)
+    data['mean_in_range'] = np.nan
+    data['change_point_weight'] = 1
+    for i, row in data.iterrows():
+        if row['Change_point'] == 1:
+            Xmean = data[S:i+1]['metric'].mean()
+            print(str(Xmean) + ' KILL ALL HUMANS!!!!1111')
+            data.ix[S:i+1, 'mean_in_range'] = Xmean
+            data.ix[S:i+1, 'change_point_weight'] = i - S + 1
+            W = i - S + 1
+            print(W)
+            S = i+1
+
+        if i == n-1:
+            Xmean = data[S:n]['metric'].mean()
+            data.ix[S:n, 'mean_in_range'] = Xmean
+    return data
+
+def cusum_engine(data):
+    rS = 0
+    CUSUM = []
+    n = len(data)
+    xmean = data.mean()
+    for i in range(n):
+        rS = rS + (data[i] - xmean)
+        CUSUM.append(rS)
+    df_CUSUM = pd.DataFrame({'CUSUM': CUSUM})
+
+    return df_CUSUM
+
+def confidence_level(data, sampling = 100):
+    CUSUM_0 = cusum_engine(data)
+    CUSUMdiff0 = CUSUM_0['CUSUM'].max() - CUSUM_0['CUSUM'].min()
+    Nbreaks = 0
+    print('CUSUMdiff0:', CUSUMdiff0)
+    for i in range(sampling-1):
+        data_new = data.sample(frac=1).reset_index(drop=True)
+        CUSUM_simulation = cusum_engine(data_new)
+        CUSUM_0['CUSUM_'+str(i)] = CUSUM_simulation
+        CUSUMdiff = CUSUM_simulation['CUSUM'].max() - CUSUM_simulation['CUSUM'].min()
+        print('CUSUMdiff:', CUSUMdiff)
+        if CUSUMdiff < CUSUMdiff0:
+            Nbreaks = Nbreaks + 1
+    conf_level = Nbreaks / sampling
+    return conf_level
+
+def scan(data, segment, conf_level = 1):
+
+    result = pd.DataFrame()
+    result['segment'] = np.nan
+    confidence_interval = conf_level
+    for i, row in data.iterrows():
+        if row['Change_point'] == 1:
+            #segment = str(data)
+            date_change_point = row['group']
+            value_from = row['mean_in_range']
+            value_to = data.ix[i+1, 'mean_in_range']
+            change_point_weight = row['change_point_weight']
+            #print('segment: '+str(segment),' date_change_point: '+str(date_change_point), ' value_from: '+str(value_from), ' value_to: '+str(value_to))
+            result = result.append({'segment': segment, 'date_change_point': date_change_point, 'value_from': value_from, 'value_to': value_to, 'confidence_interval': confidence_interval, 'change_point_weight': change_point_weight}, ignore_index=True)
+    return result
+
+def cpm_engine(metric_dataframe, column, key, alpha_cusum = 0.9, alpha_metric = 0.8):
+
+    metric_series = metric_dataframe[column]
+    data_smooth_list = exponential_smoothing(metric_series, alpha_metric)
+    data = pd.Series(data_smooth_list)
+
+    rS = 0
+    CUSUM = []
+    n = len(data)
+    xmean = data.mean()
+    for i in range(n):
+        rS = rS + (data[i] - xmean)
+        CUSUM.append(rS)
+
+    cusum_series = pd.Series(CUSUM, name='CUSUM')
+    cusum_frame = pd.DataFrame()
+    cusum_frame['CUSUM'] = exponential_smoothing(cusum_series, alpha_cusum)
+    cusum_shift = shift(cusum_frame)
+    output_frame = find_change_points(cusum_shift)
+    output_frame['metric'] = metric_series
+    model_total = find_mean(output_frame)
+    model_total['group'] = metric_dataframe[key]
+
+    conf_level = confidence_level(metric_series)
+    return model_total, conf_level
+
+#--------------------- parameters
+
+get_sada = 'D:\ZOOM\CPM\sample_3m.csv'
+sep = ','
+metric_list = ['segment1','segment2','segment3']
+key = 'Day of Order Date'
+
+#--------------------- body
+data_sample = pd.read_csv(get_sada,sep)
+
+total_result = pd.DataFrame()
+
+for i in metric_list:
+    model, conf_level = cpm_engine(data_sample, i, key)
+    scan_result = scan(model, i, conf_level)
+
+    total_result = total_result.append(scan_result)
+
+print(Fore.LIGHTYELLOW_EX)
+print(model)
+
+
+import pandas as pd
+import mysql.connector
+from sqlalchemy import create_engine
+
+engine = create_engine('mysql+mysqlconnector://[user]:[pass]@[host]:[port]/[schema]', echo=False)
+cnx = engine.raw_connection()
+data = pd.read_sql('SELECT * FROM sample_table', cnx)
+data.to_sql(name='sample_table2', con=cnx, if_exists = 'append', index=False)
+
+df.to_sql(con=con, name='table_name_for_df', if_exists='replace', flavor='mysql')
+
+wb = Workbook()
+ws = wb.active
+
+ws.append(['crm_customer_id', 'sf_customer_id'])
+#crm_customer_id, sf_customer_id
+# product, room, id, datetime_created, mestype, message
+cursor.execute(sql)
+for row in cursor:
+    ws.append([row[0], row[1]])
+wb.save(report_location)
+con.close()
+
+
+
+model.plot(y = ['metric','mean_in_range', 'CUSUM'])
+plt.show()
+
+print(Fore.LIGHTBLUE_EX)
+print(total_result)
+exit()
