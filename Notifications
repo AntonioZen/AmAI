@@ -1,0 +1,69 @@
+import openpyxl
+import pymysql
+import os
+import time
+import xlsxwriter
+import smtplib
+from openpyxl import Workbook
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+from email.mime.text import MIMEText
+from datetime import datetime, timedelta
+
+# smtp_ser = 'smtp.gmail.com'
+# address_from = 'a.gromadskiy2015@gmail.com'
+address_from = 'AmAI@cloudmccloud.com'
+password = 'pass'
+address_to = ['a.gromadskiy2015@zeoalliance.com']
+yesterday = datetime.now() - timedelta(days=1)
+workbook = xlsxwriter.Workbook('/dir/scripts/Reports/ReportFile' + yesterday.strftime('%d%m%Y') + '.xlsx')
+worksheet = workbook.add_worksheet()
+workbook.close()
+
+script_location = '/dir/scripts/SQL/SQL_script.sql'
+report_location = '/dir/scripts/Reports/ReportFile' + yesterday.strftime('%d%m%Y') + '.xlsx'
+text = 'some text to message ' + yesterday.strftime('%d%m%Y')
+pswd = open('/dir/scripts/conf.txt').read()
+
+con = pymysql.connect(host='db.server.com', port=3306, user='AntonioZen', passwd=pswd, db='db')
+cursor = con.cursor()
+sql = open(script_location).read()
+
+wb = Workbook()
+ws = wb.active
+
+ws.append(['column 1', 'column 2', 'column 3'])
+# product, room, id, datetime_created, mestype, message
+cursor.execute(sql)
+for row in cursor:
+    ws.append([row[0], row[1], row[2]])
+wb.save(report_location)
+con.close()
+
+filepath = report_location
+basename = os.path.basename(filepath)
+dateful = datetime.now()
+date = dateful.strftime("%d.%m.%y")
+header = basename + ' ' + date
+
+# Compose attachment
+part1 = MIMEText(text)
+part2 = MIMEBase('application', "octet-stream")
+part2.set_payload(open(filepath, "rb").read())
+encoders.encode_base64(part2)
+part2.add_header('Content-Disposition', 'attachment; filename="%s"' % basename)
+
+# Compose message
+msg = MIMEMultipart()
+msg['Subject'] = header
+msg['From'] = address_from
+msg['To'] = ','.join(address_to)
+msg.attach(part1)
+msg.attach(part2)
+# Send mail
+smtp = smtplib.SMTP('localhost')
+# smtp.connect(smtp_ser)
+# smtp.login(address_from, password)
+smtp.sendmail(address_from, address_to, msg.as_string())
+smtp.quit()
