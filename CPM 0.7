@@ -1,6 +1,10 @@
 import numpy as np
 import math
 import pandas as pd
+import pymysql
+
+#import mysql.connector
+from sqlalchemy import create_engine
 import matplotlib.pyplot as plt
 from colorama import Fore
 
@@ -115,13 +119,23 @@ def cpm_engine(metric_dataframe, column, key, alpha_cusum = 0.9, alpha_metric = 
     conf_level = confidence_level(metric_series)
     return model_total, conf_level
 
+def write_to_db(dataframe, engine_params, table_name, if_exists = 'replace'):
+
+    engine = create_engine('mysql+mysqlconnector://[user]:[pass]@[host]:[port]/[amoly_dev]', echo=False)
+    cnx = engine.raw_connection()
+    dataframe.to_sql(name=table_name, con=cnx, if_exists = if_exists, index=False)
+    cnx.close()
+
 #--------------------- parameters
-
-get_sada = 'D:\ZOOM\CPM\sample_3m.csv'
+#N_events,eday 'segment1'
+get_sada = 'C:/amoly/data/data.csv'
 sep = ','
-metric_list = ['segment1','segment2','segment3']
-key = 'Day of Order Date'
-
+metric_list = ['N_events']
+key = 'eday'
+log = 0
+engine_params = 'mysql+mysqlconnector://[user]:[pass]@[host]:[port]/[amoly_dev]'
+if_exists = 'replace'
+table_name = 'AmAI_scan_results'
 #--------------------- body
 data_sample = pd.read_csv(get_sada,sep)
 
@@ -133,8 +147,14 @@ for i in metric_list:
 
     total_result = total_result.append(scan_result)
 
+if log == 1:
+    write_to_db(total_result,  engine_params, table_name, if_exists)
+
 print(Fore.LIGHTYELLOW_EX)
 print(model)
+
+
+
 model.plot(y = ['metric','mean_in_range', 'CUSUM'])
 plt.show()
 
